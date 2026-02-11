@@ -26,7 +26,7 @@ pub struct CookieStore {
 
 impl CookieStore {
     /// Create a CookieStore from a serde_json::Value (already parsed).
-    fn from_value(v: Value) -> anyhow::Result<Self> {
+    pub fn from_value(v: Value) -> anyhow::Result<Self> {
         // Try to deserialize into either a map or a list.
         let cj: CookiesJson = serde_json::from_value(v)?;
         let mut map = HashMap::new();

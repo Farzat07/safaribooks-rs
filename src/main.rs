@@ -2,15 +2,16 @@ mod cli;
 mod config;
 mod cookies;
 mod display;
+mod http_client;
 
 use clap::Parser;
 use cli::Args;
 use cookies::CookieStore;
 use display::Display;
+use http_client::HttpClient;
 
 fn main() {
     let args = Args::parse();
-
     let mut ui = Display::new(&args.bookid);
 
     let cookies_path = config::cookies_file();
@@ -37,6 +38,13 @@ fn main() {
         store.len(),
         names.join(", ")
     ));
+
+    // Build the HTTP client with our cookies (no network calls yet).
+    let _client = match HttpClient::from_store(&store) {
+        Ok(c) => c,
+        Err(e) => ui.error_and_exit(&format!("Failed to build HTTP client: {e}")),
+    };
+    ui.info("HTTP client initialized with cookies (no requests performed).");
 
     let output_dir = config::books_root().join(format!("(pending) ({})", args.bookid));
 
