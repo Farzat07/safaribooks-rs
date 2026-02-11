@@ -3,14 +3,18 @@ mod config;
 mod cookies;
 mod display;
 mod http_client;
+mod orly;
 
 use clap::Parser;
 use cli::Args;
 use cookies::CookieStore;
 use display::Display;
 use http_client::HttpClient;
+use orly::check_login;
+use reqwest::Client;
 
-fn main() {
+#[tokio::main]
+async fn main() {
     let args = Args::parse();
     let mut ui = Display::new(&args.bookid);
 
@@ -40,11 +44,21 @@ fn main() {
     ));
 
     // Build the HTTP client with our cookies (no network calls yet).
-    let _client = match HttpClient::from_store(&store) {
+    let client = match HttpClient::from_store(&store) {
         Ok(c) => c,
         Err(e) => ui.error_and_exit(&format!("Failed to build HTTP client: {e}")),
     };
     ui.info("HTTP client initialized with cookies (no requests performed).");
+
+    // Check whether the cookies work (are we logged in?).
+    match check_login(&client).await {
+        Ok(true) => ui.info("Login confirmed..."),
+        Ok(false) => ui.error_and_exit(
+            "Logged out. Cookies could be stale or invalid.\n\
+            Try refreshing your cookies.json and trying again.",
+        ),
+        Err(e) => ui.error_and_exit(&format!("Login check failed: {e}")),
+    };
 
     let output_dir = config::books_root().join(format!("(pending) ({})", args.bookid));
 
