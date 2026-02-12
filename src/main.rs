@@ -10,8 +10,7 @@ use cli::Args;
 use cookies::CookieStore;
 use display::Display;
 use http_client::HttpClient;
-use orly::check_login;
-use reqwest::Client;
+use orly::{check_login, fetch_book_info};
 
 #[tokio::main]
 async fn main() {
@@ -59,6 +58,14 @@ async fn main() {
         ),
         Err(e) => ui.error_and_exit(&format!("Login check failed: {e}")),
     };
+
+    // Retrieve book info.
+    ui.info("Retrieving book info...");
+    let bookinfo = match fetch_book_info(&client, &args.bookid).await {
+        Ok(info) => info,
+        Err(e) => ui.error_and_exit(&format!("Failed to fetch book info: {}", e)),
+    };
+    ui.info(&format!("{:#?}", bookinfo));
 
     let output_dir = config::books_root().join(format!("(pending) ({})", args.bookid));
 
