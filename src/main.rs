@@ -2,6 +2,7 @@ mod cli;
 mod config;
 mod cookies;
 mod display;
+mod epub;
 mod http_client;
 mod orly;
 
