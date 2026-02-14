@@ -10,6 +10,7 @@ use clap::Parser;
 use cli::Args;
 use cookies::CookieStore;
 use display::Display;
+use epub::EpubSkeleton;
 use http_client::HttpClient;
 use orly::{check_login, fetch_book_info};
 
@@ -68,9 +69,19 @@ async fn main() {
     };
     ui.info(&format!("{:#?}", bookinfo));
 
-    let output_dir = config::books_root().join(format!("(pending) ({})", args.bookid));
+    let skeleton = EpubSkeleton::plan(&config::books_root(), &bookinfo.title, &args.bookid);
+    ui.set_output_dir(skeleton.root.clone());
 
-    ui.set_output_dir(output_dir);
+    // Create directories and required files
+    if let Err(e) = (|| -> anyhow::Result<()> {
+        skeleton.create_dirs()?;
+        skeleton.write_mimetype()?;
+        skeleton.write_container_xml()?;
+        Ok(())
+    })() {
+        ui.error_and_exit(&format!("EPUB skeleton creation failed: {e}"));
+    }
+    ui.info("EPUB skeleton ready (mimetype + META-INF/container.xml + OEBPS/).");
 
     ui.info("Initialization complete.");
     ui.info("No network operations performed in this version.");

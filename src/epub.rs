@@ -1,3 +1,5 @@
+use anyhow::{Context, Result};
+use std::fs;
 use std::path::{Path, PathBuf};
 use unicode_normalization::UnicodeNormalization;
 
@@ -9,6 +11,7 @@ pub struct EpubSkeleton {
 }
 
 impl EpubSkeleton {
+    /// Plan the output directory structure using the sanitized title + bookid.
     pub fn plan(base_books_dir: &Path, title: &str, bookid: &str) -> Self {
         // Maximum number of bytes in a filename.
         const MAX_BYTES: usize = 255;
@@ -27,6 +30,38 @@ impl EpubSkeleton {
             oebps: root_dir.join("OEBPS"),
             root: root_dir,
         }
+    }
+
+    /// Create the directories defined in the struct.
+    pub fn create_dirs(&self) -> Result<()> {
+        fs::create_dir_all(&self.oebps)
+            .with_context(|| format!("Creating directory {}", self.oebps.display()))?;
+        fs::create_dir_all(&self.meta_inf)
+            .with_context(|| format!("Creating directory {}", self.meta_inf.display()))?;
+        Ok(())
+    }
+
+    /// Write META-INF/container.xml pointing to OEBPS/content.opf.
+    pub fn write_container_xml(&self) -> Result<()> {
+        let path = self.meta_inf.join("container.xml");
+        let xml = r#"<?xml version="1.0" encoding="UTF-8"?>
+            <container xmlns="urn:oasis:names:tc:opendocument:xmlns:container" version="1.0">
+            <rootfiles>
+            <rootfile full-path="OEBPS/content.opf" media-type="application/oebps-package+xml"/>
+            </rootfiles>
+            </container>
+            "#;
+        fs::write(&path, xml).with_context(|| format!("Writing file {}", path.display()))?;
+        Ok(())
+    }
+
+    /// Write the plaintext "mimetype" file at the root (no newline).
+    pub fn write_mimetype(&self) -> Result<()> {
+        let path = self.root.join("mimetype");
+        // EXACT bytes required by OCF; do not add '\n'.
+        fs::write(&path, b"application/epub+zip")
+            .with_context(|| format!("Writing file {}", path.display()))?;
+        Ok(())
     }
 }
 
