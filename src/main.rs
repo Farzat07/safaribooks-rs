@@ -73,16 +73,8 @@ async fn main() {
     ui.set_output_dir(skeleton.root.clone());
 
     // Create directories and required files
-    if let Err(e) = (|| -> anyhow::Result<()> {
-        skeleton.create_dirs()?;
-        skeleton.write_mimetype()?;
-        skeleton.write_container_xml()?;
-        Ok(())
-    })() {
+    if let Err(e) = skeleton.initialize() {
         ui.error_and_exit(&format!("EPUB skeleton creation failed: {e}"));
     }
     ui.info("EPUB skeleton ready (mimetype + META-INF/container.xml + OEBPS/).");
-
-    ui.info("Initialization complete.");
-    ui.info("No network operations performed in this version.");
 }

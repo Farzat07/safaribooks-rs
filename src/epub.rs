@@ -32,6 +32,14 @@ impl EpubSkeleton {
         }
     }
 
+    /// Initialize EpubSkeleton by creating directories and required files.
+    pub fn initialize(&self) -> Result<()> {
+        self.create_dirs()?;
+        self.write_mimetype()?;
+        self.write_container_xml()?;
+        Ok(())
+    }
+
     /// Create the directories defined in the struct.
     pub fn create_dirs(&self) -> Result<()> {
         fs::create_dir_all(&self.oebps)
