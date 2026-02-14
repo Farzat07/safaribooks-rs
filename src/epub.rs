@@ -132,3 +132,129 @@ fn truncate_utf8_by_byte(s: &str, max_bytes: usize) -> &str {
 
     &s[..end]
 }
+
+#[cfg(test)]
+mod tests {
+    use super::EpubSkeleton;
+    use tempfile::TempDir;
+    use quick_xml::{Reader, events::Event};
+    use std::fs;
+
+    /// Make a temp directory with a predictable prefix.
+    fn temp(label: &str) -> TempDir {
+        tempfile::Builder::new()
+            .prefix(&format!("safaribooks-rs-{}", label))
+            .tempdir()
+            .unwrap_or_else(|_| panic!("Create tempdir with label: {}", label))
+    }
+
+    #[test]
+    fn initialize_skeleton() {
+        // GIVEN
+        let tmp = temp("initialize");
+        let base = tmp.path();
+        let skel = EpubSkeleton::plan(base, "A Title", "1234567890123");
+
+        // WHEN
+        skel.initialize().expect("Initialize skeleton");
+
+        // THEN: directory structure exists
+        assert!(skel.root.exists(), "Root dir missing: {}", skel.root.display());
+        assert!(skel.oebps.exists(), "OEBPS dir missing: {}", skel.oebps.display());
+        assert!(skel.meta_inf.exists(), "META-INF dir missing: {}", skel.meta_inf.display());
+    }
+
+    #[test]
+    fn mimetype_exact() {
+        // GIVEN
+        let tmp = temp("mimetype");
+        let base = tmp.path();
+        let skel = EpubSkeleton::plan(base, "A Title", "1234567890123");
+
+        // WHEN
+        skel.create_dirs().expect("Create skeleton dirs");
+        skel.write_mimetype().expect("Write mimetype");
+
+        // THEN: file exists
+        let mimetype = skel.root.join("mimetype");
+        assert!(mimetype.exists(), "Mimetype file not found");
+
+        // mimetype has *exact* bytes with *no* trailing newline.
+        let bytes = fs::read(&mimetype).expect("Read mimetype");
+        assert_eq!(
+            bytes.as_slice(),
+            b"application/epub+zip",
+            "mimetype must be exactly 'application/epub+zip' with NO trailing newline"
+        );
+    }
+
+    #[test]
+    fn container_xml_well_formed() {
+        // GIVEN
+        let tmp = temp("container");
+        let base = tmp.path();
+        let skel = EpubSkeleton::plan(base, "Another Title", "9876543210");
+
+        // WHEN
+        skel.create_dirs().expect("Create skeleton dirs");
+        skel.write_container_xml().expect("Write container.xml");
+
+        // THEN: file exists
+        let container = skel.meta_inf.join("container.xml");
+        assert!(container.exists(), "META-INF/container.xml not found");
+
+        // Parse with quick-xml to ensure it is well-formed and to inspect elements.
+        let xml = fs::read_to_string(&container).expect("Read container.xml");
+        let mut reader = Reader::from_str(xml.trim());
+
+        // Walk events; ensure <container> and expected <rootfile> are present with correct attributes.
+        let mut saw_container = false;
+        let mut saw_rootfiles = false;
+        let mut saw_rootfile_ok = false;
+
+        let mut buf = Vec::<u8>::new();
+        loop {
+            match reader.read_event_into(&mut buf) {
+                Ok(Event::Start(e) | Event::Empty(e)) => {
+                    let name_tmp = e.name();
+                    let name = name_tmp.as_ref();
+                    if name == b"container" {
+                        saw_container = true;
+                    } else if name == b"rootfiles" {
+                        saw_rootfiles = true;
+                    } else if name == b"rootfile" {
+                        // Check attributes on rootfile
+                        let mut full_path_ok = false;
+                        let mut media_type_ok = false;
+
+                        for a in e.attributes().flatten() {
+                            if a.key.as_ref() == b"full-path" && a.value.as_ref() == b"OEBPS/content.opf" {
+                                full_path_ok = true;
+                            }
+                            else if a.key.as_ref() == b"media-type"
+                                && a.value.as_ref() == b"application/oebps-package+xml"
+                            {
+                                media_type_ok = true;
+                            }
+                        }
+                        if full_path_ok && media_type_ok {
+                            saw_rootfile_ok = true;
+                        }
+                    }
+                }
+                Ok(Event::Eof) => break,
+                Ok(_) => {}
+                Err(e) => panic!("XML parse error at position {}: {e}", reader.buffer_position()),
+            }
+            buf.clear();
+        }
+
+        assert!(saw_container, "container.xml is missing <container> root element");
+        assert!(saw_rootfiles, "container.xml is missing <rootfiles> element");
+        assert!(
+            saw_rootfile_ok,
+            "container.xml <rootfile> must have full-path='OEBPS/content.opf' \
+            and media-type='application/oebps-package+xml'"
+        );
+    }
+}
